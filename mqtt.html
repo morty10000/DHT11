@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>阿里云IoT设备连接</title>
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <h1>设备控制面板</h1>
+    <div>
+        <button onclick="connectDevice()">连接设备</button>
+        <button onclick="publishMessage()">发送测试消息</button>
+        <button onclick="disconnectDevice()">断开连接</button>
+    </div>
+    <div id="status" style="margin: 20px 0; padding: 10px; background: #f0f0f0;">
+        状态：未连接
+    </div>
+    <div id="messages" style="height: 300px; overflow-y: auto; border: 1px solid #ccc; padding: 10px;">
+        <!-- 消息显示区域 -->
+    </div>
+
+    <script>
+        // 设备配置信息
+        const config = {
+            productKey: 'k1ou2S5PFlX',
+            deviceName: 'html',
+            deviceSecret: '023760c4d05a5cf5c959a94e832d6c33',
+            host: 'wss://iot-06z00huu9u3ft33.mqtt.iothub.aliyuncs.com:443/mqtt'
+        };
+
+        let client = null;
+
+        // 生成动态密码
+        function generatePassword(timestamp) {
+            const content = [
+                'clientId' + config.productKey + '.' + config.deviceName,
+                'deviceName' + config.deviceName,
+                'productKey' + config.productKey,
+                'timestamp' + timestamp
+            ].join('');
+
+            return CryptoJS.HmacSHA256(content, config.deviceSecret).toString(CryptoJS.enc.Hex);
+        }
+
+        // 连接设备
+        function connectDevice() {
+            const timestamp = Date.now();
+            
+            const options = {
+                clientId: `${config.productKey}.${config.deviceName}|securemode=2,signmethod=hmacsha256,timestamp=${timestamp}|`,
+                username: `${config.deviceName}&${config.productKey}`,
+                password: generatePassword(timestamp),
+                clean: true,
+                reconnectPeriod: 5000,
+                connectTimeout: 30 * 1000
+            };
+
+            updateStatus('正在连接...');
+            
+            try {
+                client = mqtt.connect(config.host, options);
+
+                // 连接成功回调
+                client.on('connect', () => {
+                    updateStatus('连接成功');
+                    client.subscribe(`/sys/${config.productKey}/${config.deviceName}/thing/event/property/post/reply`, (err) => {
+                        if (!err) {
+                            addMessage('订阅成功');
+                        }
+                    });
+                });
+
+                // 消息接收
+                client.on('message', (topic, message) => {
+                    addMessage(`收到消息 [${topic}]: ${message.toString()}`);
+                });
+
+                // 错误处理
+                client.on('error', (error) => {
+                    updateStatus(`连接错误: ${error.message}`);
+                });
+
+                // 断开连接处理
+                client.on('close', () => {
+                    updateStatus('连接已断开');
+                });
+
+            } catch (error) {
+                updateStatus(`连接异常: ${error.message}`);
+            }
+        }
+
+        // 发布测试消息
+        function publishMessage() {
+            if (!client || !client.connected) {
+                alert('请先连接设备');
+                return;
+            }
+
+            const payload = JSON.stringify({
+                id: Date.now(),
+                params: {
+                    status: Math.random() > 0.5 ? 'on' : 'off'
+                }
+            });
+
+            const topic = `/sys/${config.productKey}/${config.deviceName}/thing/event/property/post`;
+            
+            client.publish(topic, payload, { qos: 1 }, (error) => {
+                if (!error) {
+                    addMessage(`消息已发送: ${payload}`);
+                }
+            });
+        }
+
+        // 断开连接
+        function disconnectDevice() {
+            if (client && client.connected) {
+                client.end();
+                updateStatus('已主动断开');
+            }
+        }
+
+        // 状态更新
+        function updateStatus(text) {
+            document.getElementById('status').innerHTML = `状态：${text}`;
+        }
+
+        // 添加消息
+        function addMessage(text) {
+            const div = document.createElement('div');
+            div.innerHTML = `${new Date().toLocaleTimeString()} - ${text}`;
+            document.getElementById('messages').appendChild(div);
+            // 自动滚动到底部
+            document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
+        }
+    </script>
+</body>
+</html>

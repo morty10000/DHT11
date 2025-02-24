@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>温湿度仪表盘</title>
+    <link rel="stylesheet" href="mystyle.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+</head>
+<body>
+    <!-- 传感器数据容器 -->
+    <div class="sensor-container">
+        <!-- 温度监测模块 -->
+        <div class="data-box temperature-box">
+            <h2>🌡️ 温度监测</h2>
+            <div class="gauge-container">
+                <div class="gauge-background temperature-gauge">
+                    <div class="gauge-pointer" id="temp-pointer"></div>
+                    <div class="gauge-center"></div>
+                </div>
+            </div>
+            <div class="data-value">
+                <span id="temp-value">--</span><span class="unit">°C</span>
+            </div>
+        </div>
+
+        <!-- 湿度监测模块 -->
+        <div class="data-box humidity-box">
+            <h2>💧 湿度监测</h2>
+            <div class="gauge-container">
+                <div class="gauge-background humidity-gauge">
+                    <div class="gauge-pointer" id="humi-pointer"></div>
+                    <div class="gauge-center"></div>
+                </div>
+            </div>
+            <div class="data-value">
+                <span id="humi-value">--</span><span class="unit">%</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 连接状态显示 -->
+    <div class="connection-status">
+        <div class="status-indicator">
+            <span class="status-dot"></span>
+            <span id="status-text">正在初始化...</span>
+        </div>
+        <div class="status-details">
+            <div>Topic: <span id="current-topic">/k1ou2S5PFlX/stm32/user/update</span></div>
+            <div>最后更新: <span id="last-update">--:--:--</span></div>
+        </div>
+    </div>
+
+    <script>
+        // 仪表配置
+        const config = {
+            temperature: {
+                min: -10,
+                max: 50,
+                pointer: document.getElementById('temp-pointer'),
+                valueElement: document.getElementById('temp-value')
+            },
+            humidity: {
+                min: 0,
+                max: 100,
+                pointer: document.getElementById('humi-pointer'),
+                valueElement: document.getElementById('humi-value')
+            }
+        };
+        
+        // 阿里云配置
+        const aliyunConfig = {
+            productKey: "k1ou2S5PFlX",
+            deviceName: "html",
+            deviceSecret: "023760c4d05a5cf5c959a94e832d6c33",
+            regionId: "cn-shanghai",
+            topic: "/sys/k1ou2S5PFlX/html/thing/deviceinfo/update"
+        };
+
+        // 状态管理
+        let mqttClient = null;
+
+        /**
+ * 创建仪表盘刻度线和数值标签
+ * @param {HTMLElement} container - 仪表容器元素
+ * @param {boolean} isTemperature - 是否为温度仪表
+ */
+function createScaleMarks(container, isTemperature) {
+    const radius = 100;  // 容器半径（与CSS中gauge-container尺寸一致）
+    const totalMarks = 10; // 主刻度数量
+    const startAngle = isTemperature ? -45 : -135; // 温度起始-45°，湿度起始-135°
+    const angleStep = 27; // 每个刻度间隔角度（270°范围 / 10个间隔）
+
+    // 循环创建所有刻度
+    for (let i = 0; i <= totalMarks; i++) {
+        const currentAngle = startAngle + (i * angleStep);
+        
+        // 创建刻度线元素
+        const mark = document.createElement('div');
+        mark.className = 'gauge-mark';
+        
+        // 计算刻度线坐标（从圆心向外偏移5px）
+        const x = radius + (radius - 5) * Math.sin(currentAngle * Math.PI / 180);
+        const y = radius - (radius - 5) * Math.cos(currentAngle * Math.PI / 180);
+
+        // 设置刻度线样式
+        mark.style.cssText = `
+            left: ${x}px;
+            top: ${y}px;
+            transform: rotate(${currentAngle}deg);
+        `;
+
+        // 增强首尾刻度线
+        if(i === 0 || i === totalMarks) {
+            mark.style.height = '16px';
+            mark.style.background = '#444';
+        }
+        container.appendChild(mark);
+
+        // 每隔2个刻度添加数值标签
+        if(i % 2 === 0) {
+            const label = document.createElement('div');
+            label.className = 'gauge-label';
+            
+            // 计算标签数值
+            const value = isTemperature 
+                ? config.temperature.min + (i * 6) // 温度每刻度+6°C（-10, -4, 2...50）
+                : i * 10; // 湿度每刻度+10%（0, 20, 40...100）
+            
+            label.textContent = value;
+            
+            // 调整标签位置（向外偏移10px）
+            const labelX = radius + (radius - 10) * Math.sin(currentAngle * Math.PI / 180);
+            const labelY = radius - (radius - 10) * Math.cos(currentAngle * Math.PI / 180);
+            
+            label.style.left = `${labelX}px`;
+            label.style.top = `${labelY}px`;
+            container.appendChild(label);
+        }
+    }
+}
+
+/**
+ * 更新仪表显示
+ * @param {Object} sensorConfig - 传感器配置对象
+ * @param {number} value - 当前测量值
+ */
+function updateGauge(sensorConfig, value) {
+    // 数值边界限制（保持在实际量程范围内）
+    value = Math.max(sensorConfig.min, Math.min(sensorConfig.max, value));
+    
+    // 计算指针旋转角度
+    const range = sensorConfig.max - sensorConfig.min;
+    let angle;
+    
+    // 温度：-45°（-10°C）到 225°（50°C）
+    // 湿度：-135°（0%）到 135°（100%）
+    if (sensorConfig === config.temperature) {
+        angle = ((value - sensorConfig.min) / range) * 270 - 45;
+    } else {
+        angle = ((value - sensorConfig.min) / range) * 270 - 135;
+    }
+    
+    // 应用指针旋转动画
+    sensorConfig.pointer.style.transform = `rotate(${angle}deg)`;
+    
+    // 更新数值显示（保留一位小数）
+    sensorConfig.valueElement.textContent = value.toFixed(1);
+}
+
+        // 生成MQTT配置
+        function generateMqttConfig() {
+            const { productKey, deviceName, deviceSecret } = aliyunConfig;
+            const randomStr = Math.random().toString(16).substr(2, 6);
+            const timestamp = Date.now();
+            const clientId = `${productKey}.${deviceName}|securemode=3,signmethod=hmacsha1,timestamp=${timestamp}|${randomStr}`;
+            
+            const signContent = [
+                `clientId${clientId}`,
+                `deviceName${deviceName}`,
+                `productKey${productKey}`,
+                `timestamp${timestamp}`
+            ].join('');
+
+            try {
+                const sign = CryptoJS.HmacSHA1(signContent, deviceSecret)
+                    .toString(CryptoJS.enc.Hex);
+                
+                return {
+                    host: 'iot-06z00huu9u3ft33.mqtt.iothub.aliyuncs.com',
+                    port: 1883,
+                    clientId,
+                    username: `${deviceName}&${productKey}`,
+                    password: `version=2018-10-15&res=products/${productKey}/devices/${deviceName}&signmethod=hmacsha1&sign=${sign}`,
+                    protocol: 'wss',
+                    reconnectPeriod: 5000,
+                    connectTimeout: 10000
+                };
+            } catch (error) {
+                console.error('配置生成失败:', error);
+                updateStatus('安全认证失败', 'error');
+                throw error;
+            }
+        }
+
+        // 更新连接状态
+        function updateStatus(text, statusClass) {
+            const statusDot = document.querySelector('.status-dot');
+            const statusText = document.getElementById('status-text');
+            
+            statusDot.className = `status-dot status-${statusClass}`;
+            statusText.textContent = text;
+            
+            // 添加呼吸动画
+            statusDot.style.animation = statusClass === 'connecting' 
+                ? 'breath 1.5s infinite' 
+                : 'none';
+        }
+
+        // 更新最后通讯时间
+        function updateLastUpdateTime() {
+            const now = new Date();
+            const timeString = `${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+            document.getElementById('last-update').textContent = timeString;
+        }
+
+        // 连接阿里云
+        function connectAliyunIoT() {
+            try {
+                const mqttConfig = generateMqttConfig();
+                mqttClient = mqtt.connect(mqttConfig);
+
+                // 连接事件
+                mqttClient.on('connect', () => {
+                    updateStatus('已连接阿里云', 'connected');
+                    mqttClient.subscribe(aliyunConfig.topic, { qos: 1 });
+                });
+
+                // 消息处理
+                mqttClient.on('message', (topic, message) => {
+                    try {
+                        const payload = JSON.parse(message.toString());
+                        if (payload.temperature !== undefined) {
+                            updateGauge(config.temperature, payload.temperature);
+                        }
+                        if (payload.humidity !== undefined) {
+                            updateGauge(config.humidity, payload.humidity);
+                        }
+                        updateLastUpdateTime();
+                    } catch (e) {
+                        console.error('数据解析错误:', e);
+                    }
+                });
+
+                // 错误处理
+                mqttClient.on('error', (err) => {
+                    console.error('连接错误:', err);
+                    updateStatus(`连接失败: ${err.message}`, 'error');
+                });
+
+                // 重连处理
+                mqttClient.on('reconnect', () => {
+                    updateStatus('尝试重新连接...', 'connecting');
+                });
+
+            } catch (error) {
+                console.error('初始化失败:', error);
+                updateStatus('初始化失败', 'error');
+            }
+        }
+
+        // 页面初始化
+        window.onload = () => {
+            createScaleMarks(document.querySelector('.temperature-gauge'), true);
+            createScaleMarks(document.querySelector('.humidity-gauge'), false);
+            connectAliyunIoT();
+        }
+    </script>
+</body>
+</html>
