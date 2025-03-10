@@ -269,3 +269,11 @@ body {
 .status-disconnected {
     background: #cccccc;
 }
+/* 添加按钮样式 */
+.led-on {
+    background: linear-gradient(145deg, #28a745, #218838);
+    margin-left: 10px;
+}
+.led-off {
+    background: linear-gradient(145deg, #dc3545, #c82333);
+}

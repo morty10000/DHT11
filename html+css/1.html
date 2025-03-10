@@ -66,6 +66,8 @@
     <div class="control-panel">
         <button class="btn connect-btn" onclick="connectDevice()">连接设备</button>
         <button class="btn disconnect-btn" onclick="disconnectDevice()">断开连接</button>
+        <button class="btn led-on" onclick="controlLED(1)">💡 打开LED</button>
+        <button class="btn led-off" onclick="controlLED(0)">🔌 关闭LED</button>
     </div>
 
     <!-- 连接状态显示 -->
@@ -86,6 +88,37 @@
     </div>
 
     <script>
+    //<----------------------网页控制led---------------------->//
+    // 添加LED控制函数
+    function controlLED(state) {
+    if (!mqttClient || !mqttClient.connected) {
+        alert('请先连接设备！');
+        return;
+    }
+
+    const payload = {
+        method: "thing.service.property.set",
+        id: Date.now().toString(),
+        params: {
+            LEDState: state
+        },
+        version: "1.0"
+    };
+
+    mqttClient.publish(aliyunConfig.publishTopic, JSON.stringify(payload), { qos: 1 }, (err) => {
+        const action = state ? "开启" : "关闭";
+        if (err) {
+            updateStatus(`LED${action}指令发送失败`, 'error');
+            console.error('发布失败:', err);
+        } else {
+            updateStatus(`已发送LED${action}指令`, 'connected');
+            // 将控制指令显示在数据流中
+            dataCache.push(JSON.stringify(payload, null, 2));
+            updateDataDisplay(dataCache);
+        }
+    });
+    }
+        //<----------------------仪表配置---------------------->//
         // 仪表配置
         const config = {
             temperature: {
@@ -101,14 +134,15 @@
                 valueElement: document.getElementById('humi-value')
             }
         };
-
+        //<----------------------网页连接阿里云配置---------------------->//
         // 阿里云配置
         const aliyunConfig = {
             productKey: "k1ou2S5PFlX",
             deviceName: "html",
             deviceSecret: "023760c4d05a5cf5c959a94e832d6c33",
             host: "wss://iot-06z00huu9u3ft33.mqtt.iothub.aliyuncs.com:443/mqtt",
-            subscribeTopic: "/sys/k1ou2S5PFlX/html/thing/service/property/set"
+            subscribeTopic: "/sys/k1ou2S5PFlX/html/thing/service/property/set",
+            publishTopic: "/k1ou2S5PFlX/html/thing/event/property/post" 
         };
 
         let mqttClient = null;
