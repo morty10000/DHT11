@@ -12,8 +12,7 @@ float humi;
 float temp;
 char at[]="AT";
 char atMQTT[] = "AT+MQTTUSERCFG=0,1,\"k1ou2S5PFlX.stm32|securemode=2\\,signmethod=hmacsha256\\,timestamp=1739697434391|\",\"stm32&k1ou2S5PFlX\",\"ee52781e013cb6542be876279981400eeeb0c250cdc32a733eb685af40c1d80f\",0,0,\"\"\r\n";
-char subscribe_cmd[]  = "AT+MQTTSUB=0,\"/sys/k1ou2S5PFlX/stm32/thing/service/property/set\",0\r\n";
-char subscribe_cfg[]  = "AT+MQTTSUBCFG=0,1,1";
+char subscribe_cmd[]  = "AT+MQTTSUB=0,\"/sys/k1ou2S5PFlX/html/thing/service/property/set\",1";
 //AT+MQTTCONN=0,"<YourProductKey>.iot-as-mqtt.<Region>.aliyuncs.com",1883,1
 char atAli[] = "AT+MQTTCONN=0,\"k1ou2S5PFlX.iot-as-mqtt.cn-shanghai.aliyuncs.com\",1883,0\r\n";
 char atDataSet[]="AT+MQTTSUB=0,\"/sys/k1ou2S5PFlX/stm32/thing/service/property/set\",0\r\n";
@@ -108,7 +107,6 @@ void SendDataToAliyun(void)
 
 //¶©ÔÄ°¢ÀïÔÆÖ÷Ìâ
 void Subscribe_Aliyun_Topic(void) {
-	Serial_SendString(subscribe_cfg);
     Serial_SendString(subscribe_cmd);
     Delay_ms(500);
 }
