@@ -9,6 +9,11 @@ extern unsigned int rec_data[4];
 void SendDataToESP8266(void);
 extern float humi;
 extern float temp;
+// 在串口中断服务函数中接收数据
+char mqttMsg;
+uint8_t msgIndex = 0;
+
+void ParseLEDCommand(char *json);
 int main()
 {
 
@@ -25,7 +30,7 @@ int main()
 	ConnectWiFi();
  	ConnectToMQTT();
 	ConnectToAliyun();
-	
+	Subscribe_Aliyun_Topic();
 	
 	while(1)
 	{	
@@ -43,3 +48,4 @@ int main()
 		
 	}
 }
+

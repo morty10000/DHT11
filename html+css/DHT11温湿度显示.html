@@ -7,27 +7,7 @@
     <link rel="stylesheet" href="mystyle.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
-    <style>
-        /* 添加内联样式避免修改外部CSS */
-        .data-display {
-            width: 90%;
-            max-width: 800px;
-            margin: 20px auto;
-            padding: 15px;
-            background: rgba(255, 255, 255, 0.9);
-            border-radius: 15px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        #rawData {
-            height: 150px;
-            overflow-y: auto;
-            padding: 10px;
-            background: #f8f9fa;
-            border-radius: 8px;
-            font-family: monospace;
-            white-space: pre-wrap;
-        }
+    <style>      
     </style>
 </head>
 <body>
@@ -87,8 +67,18 @@
         <pre id="rawData">等待数据接入...</pre>
     </div>
 
+
+    <!-- 在原有数据展示区域下方添加 -->
+    <div class="send-data-display">
+        <h3>指令发送记录</h3>
+        <pre id="sendData">等待指令发送...</pre>
+    </div>
+
     <script>
-    //<----------------------网页控制led---------------------->//
+
+            //<----------------------网页控制led---------------------->//
+    // 新增发送数据缓存
+    let sendDataCache = [];
     // 添加LED控制函数
     function controlLED(state) {
     if (!mqttClient || !mqttClient.connected) {
@@ -104,21 +94,30 @@
         },
         version: "1.0"
     };
+    
+    // 记录发送数据
+    const formattedPayload = JSON.stringify(payload, null, 2);
+            sendDataCache.unshift(`[${new Date().toLocaleTimeString()}] 发送指令:\n${formattedPayload}`);
+            if (sendDataCache.length > 10) sendDataCache.pop();
+            updateSendDisplay();
 
-    mqttClient.publish(aliyunConfig.publishTopic, JSON.stringify(payload), { qos: 1 }, (err) => {
-        const action = state ? "开启" : "关闭";
-        if (err) {
-            updateStatus(`LED${action}指令发送失败`, 'error');
-            console.error('发布失败:', err);
-        } else {
-            updateStatus(`已发送LED${action}指令`, 'connected');
-            // 将控制指令显示在数据流中
-            dataCache.push(JSON.stringify(payload, null, 2));
-            updateDataDisplay(dataCache);
+            mqttClient.publish(aliyunConfig.publishTopic, JSON.stringify(payload), { qos: 1 }, (err) => {
+                const action = state ? "开启" : "关闭";
+                if (err) {
+                    updateStatus(`LED${action}指令发送失败`, 'error');
+                    console.error('发布失败:', err);
+                } else {
+                    updateStatus(`已发送LED${action}指令`, 'connected');
+                }
+            });
         }
-    });
-    }
-        //<----------------------仪表配置---------------------->//
+
+        // 新增发送数据显示更新函数
+        function updateSendDisplay() {
+            const display = document.getElementById('sendData');
+            display.innerHTML = sendDataCache.join('\n\n');
+            display.scrollTop = 0;
+        }
         // 仪表配置
         const config = {
             temperature: {
@@ -134,15 +133,14 @@
                 valueElement: document.getElementById('humi-value')
             }
         };
-        //<----------------------网页连接阿里云配置---------------------->//
+
         // 阿里云配置
         const aliyunConfig = {
             productKey: "k1ou2S5PFlX",
             deviceName: "html",
             deviceSecret: "023760c4d05a5cf5c959a94e832d6c33",
             host: "wss://iot-06z00huu9u3ft33.mqtt.iothub.aliyuncs.com:443/mqtt",
-            subscribeTopic: "/sys/k1ou2S5PFlX/html/thing/service/property/set",
-            publishTopic: "/k1ou2S5PFlX/html/thing/event/property/post" 
+            subscribeTopic: "/sys/k1ou2S5PFlX/html/thing/service/property/set"
         };
 
         let mqttClient = null;
@@ -159,6 +157,15 @@
 
             return CryptoJS.HmacSHA256(content, aliyunConfig.deviceSecret).toString(CryptoJS.enc.Hex);
         }
+
+                // 新增：提取传感器数值函数
+        function extractSensorValues(payload) {
+            return {
+            temperature: payload?.items?.temp?.value ?? null,
+              humidity: payload?.items?.humi?.value ?? null
+            };
+        }
+
 
         // 连接设备
         function connectDevice() {
@@ -202,6 +209,15 @@
                             if (typeof payload.items.humidity === 'number') {
                                 updateGauge(config.humidity, payload.items.humidity);
                             }
+                        }
+
+                        // 更新仪表显示（新逻辑）
+                        const { temperature, humidity } = extractSensorValues(payload);
+                        if (temperature !== null) {
+                            updateGauge(config.temperature, temperature);
+                        }
+                        if (humidity !== null) {
+                            updateGauge(config.humidity, humidity);
                         }
 
                         // 更新数据展示
