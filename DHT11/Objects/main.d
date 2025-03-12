@@ -34,3 +34,6 @@
 .\objects\main.o: .\System\Serial.h
 .\objects\main.o: D:\Keil5MDK\ARM\ARMCC\Bin\..\include\stdio.h
 .\objects\main.o: .\System\ESP8266.h
+.\objects\main.o: D:\Keil5MDK\ARM\ARMCC\Bin\..\include\string.h
+.\objects\main.o: D:\Keil5MDK\ARM\ARMCC\Bin\..\include\ctype.h
+.\objects\main.o: .\System\LED.h

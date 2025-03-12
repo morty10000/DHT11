@@ -186,14 +186,14 @@ uint8_t Serial_GetRxData(void)
   *           函数名为预留的指定名称，可以从启动文件复制
   *           请确保函数名正确，不能有任何差异，否则中断函数将不能进入
   */
-void USART1_IRQHandler(void)
-{
-	if (USART_GetITStatus(USART1, USART_IT_RXNE) == SET)		//判断是否是USART1的接收事件触发的中断
-	{
-		Serial_RxData = USART_ReceiveData(USART1);				//读取数据寄存器，存放在接收的数据变量
-		Serial_RxFlag = 1;										//置接收标志位变量为1
-		USART_ClearITPendingBit(USART1, USART_IT_RXNE);			//清除USART1的RXNE标志位
-																//读取数据寄存器会自动清除此标志位
-																//如果已经读取了数据寄存器，也可以不执行此代码
-	}
-}
+//void USART1_IRQHandler(void)
+//{
+//	if (USART_GetITStatus(USART1, USART_IT_RXNE) == SET)		//判断是否是USART1的接收事件触发的中断
+//	{
+//		Serial_RxData = USART_ReceiveData(USART1);				//读取数据寄存器，存放在接收的数据变量
+//		Serial_RxFlag = 1;										//置接收标志位变量为1
+//		USART_ClearITPendingBit(USART1, USART_IT_RXNE);			//清除USART1的RXNE标志位
+//																//读取数据寄存器会自动清除此标志位
+//																//如果已经读取了数据寄存器，也可以不执行此代码
+//	}
+//}

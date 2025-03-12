@@ -31,7 +31,7 @@ void SendDataToESP8266(void)
     
     // 格式化数据为 "14.7 90.0" 形式
     int result = sprintf(dataStr, "%.1f %.1f", temp, humi);  // %.1f 保证保留1位小数
-    OLED_ShowNum(4,9,humi,4);
+   // OLED_ShowNum(4,9,humi,4);
 	//OLED_ShowString(3,1,dataStr);
 }
 
@@ -101,7 +101,7 @@ void SendDataToAliyun(void)
    // Serial_SendString(atDataTest);  // 发布数据
     Delay_ms(1000);
 
-	OLED_ShowNum(4,1,humi,4);
+	//OLED_ShowNum(4,1,humi,4);
 	Serial_SendString(atDataSend);  // 发布数据
 }
 
